@@ -13,4 +13,4 @@ $(TARGET): $(OBJECTS)
 	$(CC) -o $(TARGET) $(OBJECTS)
 
 clean:
-	$(RM) $(TARGET) $(OBJECTS)
+	rm -f $(TARGET) $(OBJECTS)
