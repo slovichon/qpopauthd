@@ -1,7 +1,8 @@
 # $Id$
 
 TARGET = qpopauthd
-OBJECTS = main.o recmanip.o report.o strlcpy.o
+OBJECTS = main.o recmanip.o bark.o strlcpy.o
+CFLAGS = -Wall
 
 .c.o:
 	$(CC) $(CFLAGS) -c $< -o $*.o

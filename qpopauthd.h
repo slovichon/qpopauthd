@@ -7,15 +7,18 @@
 
 #define MAX_CONNS	50			/* Max # of simultaneous connections */
 
-#define DEF_F_AUTH	"/etc/mail/access"	/* Default file for access perms */
+#define DEF_AUTHFILE	"/etc/mail/access"	/* Default file for access perms */
 #define DEF_DELAY	5			/* Default delay for auth record timeouts */
+
+#define TRUE  1
+#define FALSE 0
 
 void usage(int status);
 int addrec(char *ip);
 int rmrec(int index);
 
 void carp(char *msg, ...);
-void report(char *msg, ...);
+void bark(char *msg, ...);
 
 struct authrec
 {
@@ -23,10 +26,9 @@ struct authrec
 	time_t	time;				/* Time to keep track of record */
 };
 
-
-extern int		*auth_ips_count;
-extern char		f_auth[BUFSIZ];
-extern struct authrec	*auth_ips[MAX_CONNS];
+extern int *auth_ips_count;
+extern char authfile[BUFSIZ];
+extern struct authrec *auth_ips[MAX_CONNS];
 
 #ifndef HAVE_STRLCPY
 size_t strlcpy(char *s, const char *t, size_t n);
