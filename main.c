@@ -1,5 +1,4 @@
 /* $Id$ */
-
 #include <stdio.h>
 #include <sys/types.h>
 #include <stdlib.h>
@@ -9,50 +8,55 @@
 #include <signal.h>
 #include <unistd.h>
 #include <string.h>
+#include <err.h>
 #include "qpopauthd.h"
 
 int *auth_ips_count;
-char authfile[BUFSIZ];
+char *authfile;
 struct authrec *auth_ips[MAX_CONNS];
 
-#define NUM_MATCHES 3
+#define NUM_MATCHES 3				/* Data matched in regular expression below */
+#define DEF_AUTHFILE "/etc/mail/access"		/* Default file for access perms */
+#define DEF_DELAY 5				/* Default delay for auth record timeouts */
 
-int main(int argc,char *argv[])
+int main(int argc, char *argv[])
 {
 	pid_t pid;
-	int arg, delay, i;
+	int c, delay, i;
 	extern char *optarg;
 	extern int errno;
 
 	/* Map shared data */
 	for (i = 0; i < MAX_CONNS; i++)
-		auth_ips[i] = mmap((void *)0,sizeof(struct authrec),
-				PROT_READ | PROT_WRITE, MAP_ANON | MAP_SHARED,
-				-1, 0);
+		if ((auth_ips[i] = mmap(0, sizeof(struct authrec), PROT_READ | PROT_WRITE,
+					MAP_ANON | MAP_SHARED, -1, 0)) == MAP_FAILED)
+			err(1, "Unable to mmap()");
 
-	auth_ips_count = mmap((void *)0,sizeof(int), PROT_READ | PROT_WRITE,
-				MAP_ANON | MAP_SHARED, -1, 0);
+	if ((auth_ips_count = mmap(0, sizeof(int), PROT_READ | PROT_WRITE,
+				   MAP_ANON | MAP_SHARED, -1, 0)) == MAP_FAILED)
+		err(1, "Unable to mmap()");
 
 	/* Set defaults */
 	delay = DEF_DELAY;
-	strlcpy(authfile, DEF_AUTHFILE, sizeof(authfile));
+	authfile = DEF_AUTHFILE;
 
 	/* Parse arguments */
-	while ((arg = getopt(argc, argv, "a:d:h")) != -1) {
-		switch (arg) {
-			case 'a':
-				/* auth file */
-				strlcpy(authfile, optarg, sizeof(authfile));
+	while ((c = getopt(argc, argv, "a:d:h")) != -1) {
+		switch (c) {
+			case 'a': /* Auth file */
+				authfile = optarg;
 				break;
-			case 'h':
-				/* Help */
+
+			case 'h': /* Help */
 				usage(0);
 				break;
-			case 'd':
+
+			case 'd': /* Delay interval for purging sessions */
 				delay = atoi(optarg);
 				break;
+
 			default:
-				/* snprintf(tmp, sizeof(tmp), "Unknown option -%s\n", arg); */
+				warn("Unknown option: %c", c);
 				usage(1);
 		}
 	}
@@ -64,7 +68,8 @@ int main(int argc,char *argv[])
 	pid = fork();
 
 	if (pid == EAGAIN || pid == ENOMEM)
-		carp("Unable to fork()");
+		err(1, "Unable to fork()");
+
 	else if (pid) {
 		/* Parent */
 		int i;
@@ -74,39 +79,30 @@ int main(int argc,char *argv[])
 
 		/* Loop through the records and remove old ones */
 		while (TRUE) {
-bark("[PARENT] Scoping %d IP records", *auth_ips_count);
-
-			for (i = 0; i < *auth_ips_count; i++) {
-bark("[PARENT] Examining %s:%d time:%d (%d of %d)",
-	auth_ips[i]->ip, auth_ips[i]->time, time(NULL), i + 1, *auth_ips_count);
-
-				if (auth_ips[i]->time + delay < time(NULL)) {
-bark("[PARENT] Removing IP ``%s''", auth_ips[i]->ip);
+			for (i = 0; i < *auth_ips_count; i++)
+				if (auth_ips[i]->time + delay < time(NULL))
 					rmrec(i);
-				}
-			}
 			sleep(1);
 		}
-	} else {		/* Child */
+	} else {
+		/* Child */
 		int ret;
 		char in[BUFSIZ], ip[15];
 		regex_t authreg;
-		regmatch_t matches[NUM_MATCHES];	/* We're only expecting 2 matches */
-
-bark("[CHILD] Compiling regex");
+		regmatch_t matches[NUM_MATCHES];
 
 		/*
 			Expect entries in the following format:
 
-			Aug 24 09:38:19 netzdamon sendmail[25661]: g7OEcIPq025661:
-				from=<firerunner@pa2600.org>,
+			Aug 24 09:38:19 hostname sendmail[25661]: g7OEcIPq025661:
+				from=<foo@bar.com>,
 				size=1306,
 				class=0,
 				nrcpts=1,
-				msgid=<20020822041803.5fd58444.firerunner@pa2600.org>,
+				msgid=<20020822041803.5fd58444.foo@bar.com>,
 				proto=SMTP,
 				daemon=MTA,
-				relay=dorms-pppoe-2-85-128.pittsburgh.resnet.pitt.edu [130.49.85.128]
+				relay=client-hostname.attbi.com [130.49.85.128]
 		 */
 		ret = regcomp(&authreg,
 			"^[A-Za-z]+ [0-9]+ "			/* date */
@@ -127,33 +123,28 @@ bark("[CHILD] Compiling regex");
 			"[[]([0-9.]+)[]]$",			/* ip */
 			REG_EXTENDED | REG_ICASE | REG_NEWLINE);
 
-		if (ret)
-			carp("[CHILD] ***WARNING***: Regex compile failed: %d",ret);
-		else {
+		if (ret) {
+			char errbuf[BUFSIZ];
+			regerror(ret, &authreg, errbuf, BUFSIZ);
+			errx(1, "Regex compile failed: %s", errbuf);
+		} else {
 			while (fgets(in, sizeof(in), stdin) != NULL) {
-bark("[CHILD] Received >>>%s<<<",in);
-
-				if ((ret = regexec(&authreg, in, NUM_MATCHES, matches, 0)) == 0)
-				{
+				if ((ret = regexec(&authreg, in, NUM_MATCHES, matches, 0)) == 0) {
 					/* Make sure string is empty */
 					int len = 1 + matches[2].rm_eo - matches[2].rm_so;
 
 					if (len > sizeof(ip))
 						len = sizeof(ip);
 
-					bzero(ip,sizeof(ip));
+					bzero(ip, sizeof(ip));
 
-					strlcpy(ip,in + matches[2].rm_so,len);
-
-bark("[child] Matched IP ``%s'' (start:%d end:%d subs:%d)",
-	ip, matches[2].rm_so, matches[2].rm_eo, authreg.re_nsub);
+					strncpy(ip, in + matches[2].rm_so, len - 1);
+					ip[len - 1] = '\0';
 
 					addrec(ip);
 				}
 			}
 		}
-
-		carp("[child] ***WARNING***: Main loop ended");
 	}
 	return 0;
 }
@@ -161,8 +152,7 @@ bark("[child] Matched IP ``%s'' (start:%d end:%d subs:%d)",
 /* Show usage information */
 void usage(int status)
 {
-	carp(	"Usage: qpopauthd [options]\n\n"
-		"Consult the manual for more help.\n");
+	fprintf(stderr, "Usage: qpopauthd [options]\n");
 
 	exit(status);
 }

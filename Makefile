@@ -1,11 +1,11 @@
 # $Id$
 
 TARGET = qpopauthd
-OBJECTS = main.o recmanip.o bark.o strlcpy.o
+OBJECTS = main.o session.o
 CFLAGS = -Wall
 
 .c.o:
-	$(CC) $(CFLAGS) -c $< -o $*.o
+	$(CC) $(CFLAGS) -c $<
 
 all: $(TARGET)
 
