@@ -1,4 +1,4 @@
-/* $Id */
+/* $Id$ */
 
 #include "qpopauthd.h"
 #include <stdio.h>

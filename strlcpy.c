@@ -1,3 +1,4 @@
+/*	$Id$	*/
 /*	$OpenBSD: strlcpy.c,v 1.6 2003/03/14 14:35:29 millert Exp $	*/
 
 /*

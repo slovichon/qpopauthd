@@ -1,4 +1,4 @@
-/* $Id */
+/* $Id$ */
 
 #include <stdio.h>
 #include <sys/types.h>
