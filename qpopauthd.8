@@ -1,0 +1,45 @@
+.\" $Id$
+.TH QPOPAUTHD 8
+.SH NAME
+qpopauthd - Qpopper/POP3 authentication daemon
+.SH SYNOPSIS
+.B qpopauthd [
+.I -ahd
+.B ]
+.SH DESCRIPTION
+.B qpopauthd
+reads lines from
+.I stdin
+continually looking for a pattern signifying successful
+authorization. Once found, 
+.B qpopauthd
+extracts the information from the log message and creates
+a new entry in the mail access list.
+
+Whenever a subsequent, matching log message is read, the
+authentication record is updated. After the last message
+has been read and the predetermined timeout period has been
+reached for a particular authentication record, the record
+is removed.
+.SH OPTIONS
+.TP
+.BR -a
+Specify the mail access list file. The default is
+/etc/mail/access.
+.TP
+.BR -d
+Specify the timeout period. The default is five minutes.
+.TP
+.BR -h
+Print out short usage information.
+.SH NOTES
+Its silly to feed authorization messages to
+.B qpopauthd
+manually. A far better alternative is to instead invoke
+.B qpopauthd
+like this:
+.IP
+.B tail -f /var/log/mailaccess | qpopauthd &
+.PP
+.SH AUTHOR
+Jared Yanovich <jaredy@closeedge.net>
