@@ -1,12 +1,10 @@
 /*
-	QPopAuthD
-	Daemon which listens for QPOP connections
-	after successful user authentication
-
-	By Jared Yanovich <jaredy@closeedge.net>
-
-	Thursday, August 22, 2002 04:04:59 AM
-*/
+ * qpopauthd
+ * Daemon which listens for QPOP connections
+ * after successful user authentication
+ *
+ * By Jared Yanovich <jaredy@closeedge.net>
+ */
 
 /* Includes */
 #include <stdio.h>
@@ -19,15 +17,22 @@
 #include <sys/mman.h>
 #include <signal.h>
 #include <string.h>
+#include <stdarg.h>
 
-/* Defines */
 #define MAX_CONNS	50		/* Maximum number of simultaneous connections */
 
 /* Default values */
 #define DEF_F_AUTH	"/etc/mail/access"
 #define DEF_DELAY	5
-
-/* Function prototypes */
+/*
+#define	HANDLERR(format,...)				\
+	{						\
+		char msg[BUFSIZ];			\
+		vnsprintf(msg,sizeof(msg),format,...);	\
+		fprintf(stderr,msg);			\
+		fflush(stderr);				\
+	}
+*/
 void usage(int status);
 int addrec(char *ip);
 int rmrec(int index);
@@ -36,25 +41,21 @@ void carp(char *msg);
 void report(char *msg);
 #endif
 
-/* Datatypes */
 struct authrec
 {
-	char	ip[15];		/* IP address; Too big a pain in the ass to make a different type */
+	char	ip[15];		/* IP address */
 	time_t	time;		/* Time to keep track of record */
 };
 
-/* Globals */
 int		*auth_ips_count;
 char		f_auth[BUFSIZ];
-
 struct authrec	*auth_ips[MAX_CONNS];
 
-/* Main */
 int main(int argc,char *argv[])
 {
 	char		tmp[BUFSIZ];
+	pid_t		pid;
 	int		arg,
-			pid,
 			delay,
 			i;
 	extern char	*optarg;
@@ -106,13 +107,13 @@ int main(int argc,char *argv[])
 		}
 	}
 
-	/* Delay is in minutes */
+	/* Delay is in minutes and sleep() wants seconds */
 	delay *= 60;
 
 	/* We'll have the child feed authenticated IPs to the parent */
 	pid = fork();
 
-	if (pid == -1)
+	if (pid == EAGAIN || pid == ENOMEM)
 	{
 		snprintf(tmp,sizeof(tmp),"Unable to fork(): %s",strerror(errno));
 		perror(tmp);
@@ -247,10 +248,7 @@ report(tmp);
 	return 0;
 }
 
-/* Function definitions */
-
 /* Show usage information */
-
 void usage(int status)
 {
 	carp
@@ -263,7 +261,6 @@ void usage(int status)
 }
 
 /* Output some information */
-
 void carp(char *msg)
 {
 	(void)fprintf(stderr,"%s\n",msg);
@@ -286,7 +283,6 @@ void report(char *msg)
 #endif
 
 /* Adds IP record of user session */
-
 int addrec(char *ip)
 {
 	FILE		*fp;
